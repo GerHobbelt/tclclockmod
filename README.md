@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/flightaware/tclclockmod.svg?branch=master)](https://travis-ci.org/flightaware/tclclockmod)
 
           _____   _  ___ _         _   __  __         _ 
          |_   _|_| |/ __| |___  __| |_|  \/  |___  __| |
@@ -83,6 +84,18 @@ Code status (CI):
 
 * GH-actions:
   - [![CI-nix](https://github.com/sebres/tclclockmod/actions/workflows/ci-nix.yml/badge.svg)](https://github.com/sebres/tclclockmod/actions/workflows/ci-nix.yml)
+
+Differences from base clock
+===========================
+
+clock unixtime
+--------------
+
+Same as "clock scan" except:
+
+* If the -timezone argument is an empty string, it uses timezone UTC
+* If the input string is an integer, it assumes it's already a UNIX epoch timestamp and returns it unchanged
+* If the input sting is not a valid time, it returns 0 rather than generating an error
 
 Contact:
 --------

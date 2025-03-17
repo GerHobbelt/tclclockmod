@@ -5,6 +5,7 @@
 /win/Release_*
 /win/nmakehlp.obj
 /win/nmakehlp.exe
+/configure
 /unix/*.o
 /unix/*.so
 /unix/Makefile

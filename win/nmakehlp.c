@@ -12,7 +12,9 @@
  * ----------------------------------------------------------------------------
  */
 
+#ifndef _CRT_SECURE_NO_DEPRECATE
 #define _CRT_SECURE_NO_DEPRECATE
+#endif
 #include <windows.h>
 #define NO_SHLWAPI_GDI
 #define NO_SHLWAPI_STREAM

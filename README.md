@@ -37,7 +37,7 @@ How to use ?
 
 ```tcl
 package require tclclockmod
-clock format -now
+clock format now
 ```
 
 Performance ?

@@ -1393,7 +1393,7 @@ ClockSetupTimeZone(
  *----------------------------------------------------------------------
  */
 
-Tcl_Obj *
+static Tcl_Obj *
 ClockFormatNumericTimeZone(int z) {
     char buf[12+1], *p;
 
@@ -2581,7 +2581,7 @@ GetYearWeekDay(
     }
 
     fields->iso8601Year = temp.iso8601Year;
-    dayOfFiscalYear = fields->julianDay - temp.julianDay;
+    dayOfFiscalYear = (int)(fields->julianDay - temp.julianDay);
     fields->iso8601Week = (dayOfFiscalYear / 7) + 1;
     fields->dayOfWeek = (dayOfFiscalYear + 1) % 7;
     if (fields->dayOfWeek < 1) {
@@ -2613,9 +2613,9 @@ GetGregorianEraYearDay(
     int changeover)		/* Gregorian transition date */
 {
     Tcl_WideInt jday = fields->julianDay;
-    Tcl_WideInt year;
     Tcl_WideInt day;
-    Tcl_WideInt n;
+    int year;
+    int n;
 
     if (jday >= changeover) {
 	/*
@@ -2631,7 +2631,7 @@ GetGregorianEraYearDay(
 	 */
 
 	day = jday - JDAY_1_JAN_1_CE_GREGORIAN;
-	n = day / FOUR_CENTURIES;
+	n = (int)(day / FOUR_CENTURIES);
 	day %= FOUR_CENTURIES;
 	if (day < 0) {
 	    day += FOUR_CENTURIES;
@@ -2644,7 +2644,7 @@ GetGregorianEraYearDay(
 	 * day = remaining days
 	 */
 
-	n = day / ONE_CENTURY_GREGORIAN;
+	n = (int)(day / ONE_CENTURY_GREGORIAN);
 	day %= ONE_CENTURY_GREGORIAN;
 	if (n > 3) {
 	    /*
@@ -2669,7 +2669,7 @@ GetGregorianEraYearDay(
      * n = number of 4-year cycles; days = remaining days.
      */
 
-    n = day / FOUR_YEARS;
+    n = (int)(day / FOUR_YEARS);
     day %= FOUR_YEARS;
     if (day < 0) {
 	day += FOUR_YEARS;
@@ -2681,7 +2681,7 @@ GetGregorianEraYearDay(
      * n = number of years; days = remaining days.
      */
 
-    n = day / ONE_YEAR;
+    n = (int)(day / ONE_YEAR);
     day %= ONE_YEAR;
     if (n > 3) {
 	/*
@@ -2704,7 +2704,7 @@ GetGregorianEraYearDay(
 	fields->era = CE;
 	fields->year = (int)year;
     }
-    fields->dayOfYear = (int)(day + 1);
+    fields->dayOfYear = (int)day + 1;
 }
 
 /*
@@ -2829,8 +2829,8 @@ GetJulianDayFromEraYearMonthDay(
     TclDateFields *fields,	/* Date to convert */
     int changeover)		/* Gregorian transition date as a Julian Day */
 {
-    Tcl_WideInt year, ym1, ym1o4, ym1o100, ym1o400;
-    int month, mm1, q, r;
+    Tcl_WideInt ym1, ym1o4, ym1o100, ym1o400;
+    int year, month, mm1, q, r;
 
     if (fields->era == BCE) {
 	year = 1 - fields->year;
@@ -3682,7 +3682,8 @@ ClockScanObjCmd(
     }
 
     /* seconds are in localSeconds (relative base date), so reset time here */
-    yyHour = yyMinutes = yySeconds = yySecondOfDay = 0; yyMeridian = MER24;
+    yySecondOfDay = yySeconds = yyMinutes = yyHour = 0;
+    yyMeridian = MER24;
 
     /* If free scan */
     if (opts.formatObj == NULL) {
@@ -4570,7 +4571,7 @@ ClockAddObjCmd(
 	case CLC_ADD_WEEKDAYS:
 	    /* add number of week days (skipping Saturdays and Sundays)
 	     * to a relative days value. */
-	    offs = ClockWeekdaysOffs(yy.date.dayOfWeek, offs);
+	    offs = ClockWeekdaysOffs(yy.date.dayOfWeek, (int)offs);
 	    yyRelDay += offs;
 	    break;
 	case CLC_ADD_HOURS:

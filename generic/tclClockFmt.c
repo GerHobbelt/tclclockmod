@@ -58,82 +58,57 @@ static void ClockFmtScnStorageDelete(ClockFmtScnStorage *fss);
  *----------------------------------------------------------------------
  */
 
-static inline void
-_str2int_no(
-    int	       *out,
-    register
-    const char *p,
-    const char *e,
-    int sign)
-{
-    /* assert(e <= p+10); */
-    register int val = 0;
-    /* overflow impossible for 10 digits ("9..9"), so no needs to check at all */
-    while (p < e) {			/* never overflows */
-	val = val * 10 + (*p++ - '0');
-    }
-    if (sign < 0) { val = -val; }
-    *out = val;
-}
-
-static inline void
-_str2wideInt_no(
-    Tcl_WideInt *out,
-    register
-    const char	*p,
-    const char	*e,
-    int sign)
-{
-    /* assert(e <= p+18); */
-    register Tcl_WideInt val = 0;
-    /* overflow impossible for 18 digits ("9..9"), so no needs to check at all */
-    while (p < e) {			/* never overflows */
-	val = val * 10 + (*p++ - '0');
-    }
-    if (sign < 0) { val = -val; }
-    *out = val;
-}
-
-/* int & Tcl_WideInt overflows may happens here (expected case) */
-#if (defined(__GNUC__) || defined(__GNUG__)) && !defined(__clang__)
-# pragma GCC optimize("no-trapv")
-#endif
-
 static inline int
 _str2int(
-    int	       *out,
-    register
+    int *out,
     const char *p,
     const char *e,
     int sign)
 {
-    register int val = 0;
-    /* overflow impossible for 10 digits ("9..9"), so no needs to check before */
-    const char *eNO = p+10;
-    if (eNO > e) {
-	eNO = e;
+    char last;
+    int val = 0;
+
+    if (e - p > 10) {           /* definitely overflows */
+        return TCL_ERROR;
     }
-    while (p < eNO) {				/* never overflows */
-	val = val * 10 + (*p++ - '0');
+
+    /*
+     * Overflow impossible for max 9 digits ("9..9"),
+     * or for 10 digits if it starts with 1 ("19..9").
+     */
+    if (e - p <= 9 || *p <= '1' ) {
+        while (p < e) {
+            val = val * 10 + (*p++ - '0');
+        }
+        *out = (sign >= 0) ? val : -val;
+        return TCL_OK;
     }
+
+    /* 10 digits and it may overflow at last char */
+    e--;
+    while (p < e) {
+        val = val * 10 + (*p++ - '0');
+    }
+    last = *p - '0';
     if (sign >= 0) {
-	while (p < e) {				/* check for overflow */
-	    int prev = val;
-	    val = val * 10 + (*p++ - '0');
-	    if (val / 10 < prev) {
-		return TCL_ERROR;
-	    }
-	}
+        if ( (val > INT_MAX / 10)
+          || ((val == INT_MAX / 10) && (last > INT_MAX % 10))
+        ) {
+            return TCL_ERROR;   /* overflow*/
+        }
+        val = val * 10 + last;
     } else {
-	val = -val;
-	while (p < e) {				/* check for overflow */
-	    int prev = val;
-	    val = val * 10 - (*p++ - '0');
-	    if (val / 10 > prev) {
-		return TCL_ERROR;
-	    }
-	}
+        val = -val;
+        if ( (val < INT_MIN / 10)
+          || ((val == INT_MIN / 10) && ((INT_MIN % 10 < 0) ?
+                (last > -(INT_MIN % 10)) : (last > 10-(INT_MIN % 10))
+          ))
+        ) {
+            return TCL_ERROR;   /* overflow*/
+        }
+        val = val * 10 - last;
     }
+
     *out = val;
     return TCL_OK;
 }
@@ -141,38 +116,54 @@ _str2int(
 static inline int
 _str2wideInt(
     Tcl_WideInt *out,
-    register
-    const char	*p,
-    const char	*e,
+    const char *p,
+    const char *e,
     int sign)
 {
-    register Tcl_WideInt val = 0;
-    /* overflow impossible for 18 digits ("9..9"), so no needs to check before */
-    const char *eNO = p+18;
-    if (eNO > e) {
-	eNO = e;
+    char last;
+    Tcl_WideInt val = 0;
+
+    if (e - p > 19) {           /* definitely overflows */
+        return TCL_ERROR;
     }
-    while (p < eNO) {				/* never overflows */
-	val = val * 10 + (*p++ - '0');
+
+    /*
+     * Overflow impossible for max 18 digits ("9..9"),
+     * or for 19 digits if it starts with 8 ("89..9").
+     */
+    if (e - p <= 18 || *p <= '8' ) {
+        while (p < e) {
+            val = val * 10 + (*p++ - '0');
+        }
+        *out = (sign >= 0) ? val : -val;
+        return TCL_OK;
     }
+
+    /* 19 digits and it may overflow at last char */
+    e--;
+    while (p < e) {
+        val = val * 10 + (*p++ - '0');
+    }
+    last = *p - '0';
     if (sign >= 0) {
-	while (p < e) {				/* check for overflow */
-	    Tcl_WideInt prev = val;
-	    val = val * 10 + (*p++ - '0');
-	    if (val / 10 < prev) {
-		return TCL_ERROR;
-	    }
-	}
+        if ( (val > WIDE_MAX / 10)
+          || ((val == WIDE_MAX / 10) && (last > WIDE_MAX % 10))
+        ) {
+            return TCL_ERROR;   /* overflow*/
+        }
+        val = val * 10 + last;
     } else {
-	val = -val;
-	while (p < e) {				/* check for overflow */
-	    Tcl_WideInt prev = val;
-	    val = val * 10 - (*p++ - '0');
-	    if (val / 10 > prev) {
-		return TCL_ERROR;
-	    }
-	}
+        val = -val;
+        if ( (val < WIDE_MIN / 10)
+          || ((val == WIDE_MIN / 10) && ((WIDE_MIN % 10 < 0) ?
+                (last > -(WIDE_MIN % 10)) : (last > 10-(WIDE_MIN % 10))
+          ))
+        ) {
+            return TCL_ERROR;   /* overflow*/
+        }
+        val = val * 10 - last;
     }
+
     *out = val;
     return TCL_OK;
 }
@@ -186,10 +177,6 @@ TclAtoWIe(
 {
     return _str2wideInt(out, p, e, sign);
 }
-
-#if (defined(__GNUC__) || defined(__GNUG__)) && !defined(__clang__)
-# pragma GCC reset_options
-#endif
 
 /*
  *----------------------------------------------------------------------
@@ -1649,9 +1636,9 @@ ClockScnToken_LocaleERA_Proc(ClockFmtScnCmdArgs *opts,
     }
 
     if (val & 1) {
-	yydate.era = CE;
+	yydate.flags &= ~CLF_BCE;
     } else {
-	yydate.era = BCE;
+	yydate.flags |= CLF_BCE;
     }
 
     return TCL_OK;
@@ -1887,8 +1874,7 @@ ClockScnToken_StarDate_Proc(ClockFmtScnCmdArgs *opts,
     /* Build a date from year and fraction. */
 
     yydate.year = year + RODDENBERRY;
-    yydate.era = CE;
-    yydate.gregorian = 1;
+    yydate.flags &= ~(CLF_BCE|CLF_BGREG);
 
     if (IsGregorianLeapYear(&yydate)) {
 	fractYear *= 366;
@@ -1956,7 +1942,7 @@ static ClockScanTokenMap ScnSTokenMap[] = {
     {CTOKT_INT, CLF_ISO8601YEAR | CLF_ISO8601CENTURY, 0, 4, 4, TclOffset(DateInfo, date.iso8601Year),
 	NULL},
     /* %V */
-    {CTOKT_INT, CLF_ISO8601WEAK, 0, 1, 2, TclOffset(DateInfo, date.iso8601Week),
+    {CTOKT_INT, CLF_ISO8601WEEK, 0, 1, 2, TclOffset(DateInfo, date.iso8601Week),
 	NULL},
     /* %a %A %u %w */
     {CTOKT_PARSER, CLF_DAYOFWEEK, 0, 0, 0xffff, 0,
@@ -2399,30 +2385,15 @@ ClockScan(
 	    if (map->offs) {
 		p = yyInput; x = p + size;
 		if (map->type == CTOKT_INT) {
-		    if (size <= 10) {
-			_str2int_no((int *)(((char *)info) + map->offs),
-				p, x, sign);
-		    } else {
-			/* we don't have such large scan tokens at the moment */
-			goto overflow;
-			/* currently unused (maxSize of CTOKT_INT tokens <= 10) */
-			#if 0
-			if (_str2int((int *)(((char *)info) + map->offs),
+		    if (_str2int((int *)(((char *)info) + map->offs),
 				p, x, sign) != TCL_OK) {
-			    goto overflow;
-			}
-			#endif
+			goto overflow;
 		    }
 		    p = x;
 		} else {
-		    if (size <= 18) {
-			_str2wideInt_no((Tcl_WideInt *)(((char *)info) + map->offs),
-				p, x, sign);
-		    } else {
-			if (_str2wideInt((Tcl_WideInt *)(((char *)info) + map->offs),
+		    if (_str2wideInt((Tcl_WideInt *)(((char *)info) + map->offs),
 				p, x, sign) != TCL_OK) {
-			    goto overflow;
-			}
+			goto overflow;
 		    }
 		    p = x;
 		}
@@ -2539,7 +2510,7 @@ ClockScan(
 		    case (CLF_DAYOFYEAR):
 		    /* ddd over naked weekday */
 		    if (!(flags & CLF_ISO8601YEAR)) {
-			flags &= ~CLF_ISO8601WEAK;
+			flags &= ~CLF_ISO8601WEEK;
 		    }
 		    break;
 		    case (CLF_MONTH|CLF_DAYOFYEAR|CLF_DAYOFMONTH):
@@ -2548,7 +2519,7 @@ ClockScan(
 		    case (CLF_DAYOFMONTH):
 		    /* mmdd / dd over naked weekday */
 		    if (!(flags & CLF_ISO8601YEAR)) {
-			flags &= ~CLF_ISO8601WEAK;
+			flags &= ~CLF_ISO8601WEEK;
 		    }
 		    break;
 		    /* neither mmdd nor ddd available */
@@ -2556,12 +2527,12 @@ ClockScan(
 		    /* but we have day of the week, which can be used */
 		    if (flags & CLF_DAYOFWEEK) {
 			/* prefer week based calculation of julianday */
-			flags |= CLF_ISO8601WEAK;
+			flags |= CLF_ISO8601WEEK;
 		    }
 		}
 
 		/* YearWeekDay below YearMonthDay */
-		if ( (flags & CLF_ISO8601WEAK)
+		if ( (flags & CLF_ISO8601WEEK)
 		  && ( (flags & (CLF_YEAR|CLF_DAYOFYEAR)) == (CLF_YEAR|CLF_DAYOFYEAR)
 		    || (flags & (CLF_YEAR|CLF_DAYOFMONTH|CLF_MONTH)) == (CLF_YEAR|CLF_DAYOFMONTH|CLF_MONTH)
 		  )
@@ -2569,12 +2540,12 @@ ClockScan(
 		    /* yy precedence below yyyy */
 		    if (!(flags & CLF_ISO8601CENTURY) && (flags & CLF_CENTURY)) {
 			/* normally precedence of ISO is higher, but no century - so put it down */
-			flags &= ~CLF_ISO8601WEAK;
+			flags &= ~CLF_ISO8601WEEK;
 		    }
 		    else
 		    /* yymmdd or yyddd over naked weekday */
 		    if (!(flags & CLF_ISO8601YEAR)) {
-			flags &= ~CLF_ISO8601WEAK;
+			flags &= ~CLF_ISO8601WEEK;
 		    }
 		}
 
@@ -2590,7 +2561,7 @@ ClockScan(
 			}
 		    }
 		} 
-		if ( (flags & (CLF_ISO8601WEAK|CLF_ISO8601YEAR)) ) {
+		if ( (flags & (CLF_ISO8601WEEK|CLF_ISO8601YEAR)) ) {
 		    if ((flags & (CLF_ISO8601YEAR|CLF_YEAR)) == CLF_YEAR) {
 		    	/* for calculations expected iso year */
 			info->date.iso8601Year = yyYear;
@@ -2607,7 +2578,7 @@ ClockScan(
 			}
 		    }
 		    if ((flags & (CLF_ISO8601YEAR|CLF_YEAR)) == CLF_ISO8601YEAR) {
-		    	/* for calculations expected year (e. g. CLF_ISO8601WEAK not set) */
+		    	/* for calculations expected year (e. g. CLF_ISO8601WEEK not set) */
 			yyYear = info->date.iso8601Year;
 		    }
 		}
@@ -2904,7 +2875,7 @@ ClockFmtToken_LocaleERA_Proc(
     const char *s;
     int len;
 
-    if (dateFmt->date.era == BCE) {
+    if (dateFmt->date.flags & CLF_BCE) {
 	mcObj = ClockMCGet(opts, MCLIT_BCE);
     } else {
 	mcObj = ClockMCGet(opts, MCLIT_CE);
